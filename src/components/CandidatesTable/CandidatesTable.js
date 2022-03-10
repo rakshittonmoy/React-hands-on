@@ -1,56 +1,18 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useState, useMemo } from "react";
 import { useHistory } from "react-router-dom";
+import { useFetch } from "../../hooks/useFetch";
 import { TableHeader, Pagination, Search } from "../DataTable";
 import { fetchQueryParams, updateQueryParams } from "./CandidatesTable.actions";
 import { HEADERS as headers, ITEMS_PER_PAGE } from './constants';
-import usePageLoader from '../../hooks/usePageLoader';
 
 const DataTable = () => {
     const { page, searchStr, sortOn, sortOrder } = fetchQueryParams();
-    const [loader, showLoader, hideLoader] = usePageLoader();
-    const [applications, setApplicationsData] = useState([]);
     const [totalItems, setTotalItems] = useState(0);
     const [currentPage, setCurrentPage] = useState(page);
     const [search, setSearch] = useState(searchStr);
     const [sorting, setSorting] = useState({ field: sortOn, order: sortOrder });
-    const errorsFound = useRef(false);
     const history = useHistory();
-
-    useEffect(() => {
-
-        let retries = 4;
-
-        function wait(delay){
-            return new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        
-        function retry() {
-            errorsFound.current = true;
-            hideLoader();
-            if (--retries) {
-                wait(5000).then(() => getData());
-            }
-        }
-
-        const getData = () => { 
-            showLoader();
-            fetch("http://personio-fe-test.herokuapp.com/api/v1/candidates")
-                .then(response => response.json())
-                .then(json => {
-                    hideLoader();
-                    if(json.error) {
-                        throw Error(json.error);
-                    }
-                    setApplicationsData(json);
-                }, 
-                error => {
-                    retry();
-                })
-                .catch(err => retry());
-        };
-
-        getData();
-    }, []);
+    const [loader, applications, hasErrors] = useFetch();
 
     const applicationsData = useMemo(() => {
         let computedApplications = applications.data || [];
@@ -60,9 +22,10 @@ const DataTable = () => {
         // Applying the search criteria
         if (search) {
             computedApplications = computedApplications.filter(
-                comment =>
-                    comment.name.toLowerCase().includes(search.toLowerCase()) ||
-                    comment.email.toLowerCase().includes(search.toLowerCase())
+                item =>
+                item.name.toLowerCase().includes(search.toLowerCase()) ||
+                item.status.toLowerCase().includes(search.toLowerCase()) ||
+                item.position_applied.toLowerCase().includes(search.toLowerCase())
             );
         }
 
@@ -72,8 +35,16 @@ const DataTable = () => {
         if (sorting.field) {
             const reversed = sorting.order === "asc" ? 1 : -1;
             computedApplications = computedApplications.sort(
-                (a, b) =>
-                    reversed * a[sorting.field].localeCompare(b[sorting.field])
+                (a, b) => {
+                    if(sorting.field === 'year_of_experience') {
+                        return reversed * (a[sorting.field] - b[sorting.field]);
+                    }
+                    else if (sorting.field === 'application_date') {
+                        return reversed * (new Date(a[sorting.field]) - new Date(b[sorting.field]));
+                    } else {
+                        return reversed * a[sorting.field].localeCompare(b[sorting.field]);
+                    }
+                }
             );
         }
 
@@ -121,11 +92,10 @@ const DataTable = () => {
                                 <td>{application.status}</td>
                             </tr>
                         ))}
-                        {applicationsData.length === 0 && errorsFound.current===false && <tr>No data found</tr>}
-                        {applicationsData.length === 0 && errorsFound.current===true && <tr>Error while retrieving data</tr>}
                     </tbody>
                 </table>
-    
+                {applicationsData.length === 0 && hasErrors.current===false && <div>No data found</div>}
+                {applicationsData.length === 0 && hasErrors.current===true && <div>Error while retrieving data.</div>}
                 <Pagination
                     total={totalItems}
                     itemsPerPage={ITEMS_PER_PAGE}
