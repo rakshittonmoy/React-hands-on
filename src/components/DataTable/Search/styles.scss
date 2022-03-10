@@ -1,0 +1,10 @@
+.input-wrapper {
+    position: relative;
+}
+.input-wrapper:after {
+    font-family: 'FontAwesome';
+    content: '\f002';
+    position: absolute;
+    right: 6px;
+    margin-top: -30px;
+}
